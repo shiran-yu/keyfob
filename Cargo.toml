@@ -1,6 +1,6 @@
 [package]
 name = "keyfob"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 rust-version = "1.80"
 description = "API tokens for your shell, your scripts and Claude Code: kept in the OS keystore (or a 0600 file on servers) and handed to one command at a time"

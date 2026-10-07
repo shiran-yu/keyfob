@@ -81,20 +81,31 @@ pub fn files() -> Vec<PathBuf> {
         let claude = util::claude_dir();
         let installed = util::load_json(&claude.join("plugins/installed_plugins.json")).unwrap_or(Value::Null);
         let enabled = util::load_json(&claude.join("settings.json")).map(|v| v["enabledPlugins"].clone()).unwrap_or(Value::Null);
+        let markets = util::load_json(&claude.join("plugins/known_marketplaces.json")).unwrap_or(Value::Null);
+        let declared_in = |root: &Path| -> Option<PathBuf> { [root.join("keyfob.json"), root.join(".claude-plugin/keyfob.json")].into_iter().find(|p| p.is_file()) };
         if let Some(plugins) = installed["plugins"].as_object() {
             for (key, entries) in plugins {
                 if enabled[key.as_str()].as_bool() != Some(true) {
                     continue;
                 }
-                let list = entries.as_array().cloned().unwrap_or_else(|| vec![entries.clone()]);
-                for e in list {
-                    if let Some(root) = e["installPath"].as_str() {
-                        for cand in [Path::new(root).join("keyfob.json"), Path::new(root).join(".claude-plugin/keyfob.json")] {
-                            if cand.is_file() {
-                                out.push(cand);
-                                break;
+                // A marketplace added from a local folder loads its plugins in place: read the source, not the cached copy.
+                if let Some((name, market)) = key.rsplit_once('@') {
+                    if markets[market]["source"]["source"].as_str() == Some("directory") {
+                        if let Some(base) = markets[market]["source"]["path"].as_str() {
+                            let manifest = util::load_json(&Path::new(base).join(".claude-plugin/marketplace.json")).unwrap_or(Value::Null);
+                            let src = manifest["plugins"].as_array().into_iter().flatten().find(|p| p["name"].as_str() == Some(name)).and_then(|p| p["source"].as_str().map(String::from));
+                            if let Some(found) = src.and_then(|s| declared_in(&Path::new(base).join(s.trim_start_matches("./")))) {
+                                out.push(found);
+                                continue;
                             }
                         }
+                    }
+                }
+                let list = entries.as_array().cloned().unwrap_or_else(|| vec![entries.clone()]);
+                for e in list {
+                    if let Some(found) = e["installPath"].as_str().and_then(|root| declared_in(Path::new(root))) {
+                        out.push(found);
+                        break;
                     }
                 }
             }

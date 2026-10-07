@@ -175,6 +175,19 @@ fn guard_hook_speaks_claude_codes_json() {
 }
 
 #[test]
+fn doctor_follows_sourced_files_and_reads_mcp_config() {
+    let e = Env::new();
+    std::fs::create_dir_all(e.home().join(".config")).unwrap();
+    std::fs::write(e.home().join(".bashrc"), "[ -f \"$HOME/.config/api-keys.env\" ] && . \"$HOME/.config/api-keys.env\"\n").unwrap();
+    std::fs::write(e.home().join(".config/api-keys.env"), "export S2_API_KEY=abcdefghijklmnop\nexport OPENALEX_API_KEY=qrstuvwxyz123456\n").unwrap();
+    std::fs::write(e.home().join(".claude.json"), r#"{"mcpServers":{"mineru":{"type":"http","url":"https://x","env":{"MINERU_API_TOKEN":"eyJabcdefghijklmnopqrstu"}}}}"#).unwrap();
+    let s = out(&e.run(&["doctor", "--json"], None));
+    assert!(s.contains("S2_API_KEY") && s.contains("OPENALEX_API_KEY") && s.contains("api-keys.env"), "{s}");
+    assert!(s.contains("mcpServers.mineru.env") && s.contains("MINERU_API_TOKEN"), "{s}");
+    assert!(!s.contains("abcdefghij") && !s.contains("eyJabcdef"));
+}
+
+#[test]
 fn keychain_round_trip() {
     if !cfg!(target_os = "macos") || std::env::var("KEYFOB_TEST_KEYCHAIN").as_deref() != Ok("1") {
         return;
@@ -199,4 +212,35 @@ fn keychain_round_trip() {
     assert_eq!(out(&kc(&["get", &name], None)), value);
     assert!(kc(&["rm", &name, "--yes"], None).status.success());
     assert_eq!(kc(&["get", &name], None).status.code(), Some(1));
+}
+
+#[test]
+fn declarations_of_a_folder_marketplace_come_from_its_source() {
+    // installed_plugins.json points at a stale cached copy without keyfob.json; the marketplace is a local
+    // folder that Claude Code loads in place, and the declaration lives in that source.
+    let e = Env::new();
+    let root = e.dir.path();
+    let claude = root.join("claude");
+    let market = root.join("market");
+    let stale = root.join("cache/desk/0.1.0");
+    std::fs::create_dir_all(market.join(".claude-plugin")).unwrap();
+    std::fs::create_dir_all(market.join("plugins/desk")).unwrap();
+    std::fs::create_dir_all(&stale).unwrap();
+    std::fs::create_dir_all(claude.join("plugins")).unwrap();
+    std::fs::write(market.join(".claude-plugin/marketplace.json"), r#"{"name":"m","plugins":[{"name":"desk","source":"./plugins/desk"}]}"#).unwrap();
+    std::fs::write(market.join("plugins/desk/keyfob.json"), r#"{"name":"desk","groups":{"g":{"env":{"G_KEY":"g-key"}}}}"#).unwrap();
+    std::fs::write(claude.join("plugins/installed_plugins.json"), serde_json::json!({"version":2,"plugins":{"desk@m":[{"installPath": stale}]}}).to_string()).unwrap();
+    std::fs::write(claude.join("plugins/known_marketplaces.json"), serde_json::json!({"m":{"source":{"source":"directory","path": market}}}).to_string()).unwrap();
+    std::fs::write(claude.join("settings.json"), r#"{"enabledPlugins":{"desk@m":true}}"#).unwrap();
+    let mut c = e.cmd(&["decls", "--json"]);
+    c.env_remove("KEYFOB_NO_PLUGINS").env("CLAUDE_CONFIG_DIR", &claude);
+    let o = c.output().unwrap();
+    let v: serde_json::Value = serde_json::from_str(&out(&o)).unwrap();
+    assert_eq!(v["groups"]["g"]["env"]["G_KEY"], "g-key", "{}", out(&o));
+    // disabled: not read
+    std::fs::write(claude.join("settings.json"), r#"{"enabledPlugins":{"desk@m":false}}"#).unwrap();
+    let mut c = e.cmd(&["decls", "--json"]);
+    c.env_remove("KEYFOB_NO_PLUGINS").env("CLAUDE_CONFIG_DIR", &claude);
+    let v: serde_json::Value = serde_json::from_str(&out(&c.output().unwrap())).unwrap();
+    assert!(v["groups"]["g"].is_null());
 }

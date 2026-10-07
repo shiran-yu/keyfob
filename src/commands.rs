@@ -506,14 +506,49 @@ const SHELL_FILES: &[&str] = &[".zshrc", ".zshenv", ".zprofile", ".bashrc", ".ba
 
 fn plaintext_hits() -> Vec<Value> {
     let re = Regex::new(r#"(?m)^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*["']?([^\s"'#$][^"'#\s]{7,})"#).unwrap();
+    let sourced = Regex::new(r#"(?m)(?:^|[;&|]\s*)(?:\.|source)\s+["']?((?:~|\$HOME|\$\{HOME\}|/)[^"'\s;&|)]+)"#).unwrap();
     let mut hits = vec![];
-    for rel in SHELL_FILES {
-        let p = util::home().join(rel);
-        let Ok(text) = std::fs::read_to_string(&p) else { continue };
+    // shell rc files, and the files they source (one level: a keys file loaded from .bashrc is the common case)
+    let mut files: Vec<std::path::PathBuf> = SHELL_FILES.iter().map(|rel| util::home().join(rel)).collect();
+    for f in files.clone() {
+        if let Ok(text) = std::fs::read_to_string(&f) {
+            for c in sourced.captures_iter(&text) {
+                let raw = c[1].replace("${HOME}", "~").replace("$HOME", "~");
+                let p = decl::expand_home(&raw);
+                if p.is_file() && !files.contains(&p) {
+                    files.push(p);
+                }
+            }
+        }
+    }
+    for p in &files {
+        let Ok(text) = std::fs::read_to_string(p) else { continue };
         for c in re.captures_iter(&text) {
             if util::secret_like_var(&c[1]) {
                 let line = text[..c.get(0).unwrap().start()].matches('\n').count() + 1;
-                hits.push(json!({ "file": format!("~/{rel}"), "line": line, "var": &c[1] }));
+                hits.push(json!({ "file": util::tilde(p), "line": line, "var": &c[1] }));
+            }
+        }
+    }
+    // MCP servers in ~/.claude.json (user scope and per project): literal env values and credential headers
+    if let Some(cj) = util::load_json(&util::home().join(".claude.json")) {
+        let mut servers: Vec<(String, Value)> = cj["mcpServers"].as_object().into_iter().flatten().map(|(n, v)| (n.clone(), v.clone())).collect();
+        for (proj, pv) in cj["projects"].as_object().into_iter().flatten() {
+            for (n, v) in pv["mcpServers"].as_object().into_iter().flatten() {
+                servers.push((format!("{n} (project {})", util::tilde(std::path::Path::new(proj))), v.clone()));
+            }
+        }
+        for (name, cfg) in servers {
+            for (k, v) in cfg["env"].as_object().into_iter().flatten() {
+                if util::secret_like_var(k) && v.as_str().map(|s| s.len() >= 8 && !s.starts_with('$')).unwrap_or(false) {
+                    hits.push(json!({ "file": format!("~/.claude.json mcpServers.{name}.env"), "line": null, "var": k }));
+                }
+            }
+            for (k, v) in cfg["headers"].as_object().into_iter().flatten() {
+                let credential = k.eq_ignore_ascii_case("authorization") || util::secret_like_var(&k.replace('-', "_"));
+                if credential && v.as_str().map(|s| s.len() >= 16 && !s.contains("${")).unwrap_or(false) {
+                    hits.push(json!({ "file": format!("~/.claude.json mcpServers.{name}.headers"), "line": null, "var": k }));
+                }
             }
         }
     }
