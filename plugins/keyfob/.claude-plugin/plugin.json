@@ -1,0 +1,10 @@
+{
+  "name": "keyfob",
+  "version": "0.1.0",
+  "description": "API tokens for Claude Code, your shell and your scripts: kept in the macOS Keychain, the Linux Secret Service or a 0600 file on servers, handed to one command at a time; paste a token into the chat and it is stored before the message is kept; a guard stops commands that would print one; plugins declare what they need in keyfob.json",
+  "author": { "name": "Shiran Yu", "url": "https://github.com/yushiran" },
+  "homepage": "https://github.com/yushiran/keyfob",
+  "repository": "https://github.com/yushiran/keyfob",
+  "license": "MIT",
+  "keywords": ["secrets", "api-keys", "tokens", "keychain", "secret-service", "security"]
+}

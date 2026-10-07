@@ -1,0 +1,9 @@
+{
+  "description": "keyfob: the Bash guard (PreToolUse), paste capture, the /keyfob panel and the keyfob_status tool",
+  "modules": ["./register.js"],
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/keyfob\" guard", "timeout": 15 } ] }
+    ]
+  }
+}

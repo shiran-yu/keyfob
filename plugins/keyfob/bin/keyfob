@@ -1,0 +1,57 @@
+#!/bin/sh
+# keyfob launcher: runs the keyfob binary for this machine.
+#   KEYFOB_BIN set          that binary
+#   inside a checkout       target/release/keyfob, else target/debug/keyfob (cargo build)
+#   otherwise               the release matching this plugin, downloaded once from GitHub, its SHA-256
+#                           checked against the release's own checksum file, kept in
+#                           ~/.cache/keyfob/bin/<version>/keyfob
+set -eu
+VERSION=0.1.0
+REPO=yushiran/keyfob
+
+if [ -n "${KEYFOB_BIN:-}" ]; then exec "$KEYFOB_BIN" "$@"; fi
+
+here=$(cd "$(dirname "$0")" && pwd)
+root=$(cd "$here/../../.." 2>/dev/null && pwd || true)
+if [ -n "$root" ] && [ -f "$root/Cargo.toml" ]; then
+    for b in "$root/target/release/keyfob" "$root/target/debug/keyfob"; do
+        if [ -x "$b" ]; then exec "$b" "$@"; fi
+    done
+fi
+
+case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64) target=aarch64-apple-darwin ;;
+    Darwin-x86_64) target=x86_64-apple-darwin ;;
+    Linux-x86_64) target=x86_64-unknown-linux-musl ;;
+    Linux-aarch64 | Linux-arm64) target=aarch64-unknown-linux-musl ;;
+    *)
+        echo "keyfob: no prebuilt binary for $(uname -s)-$(uname -m); build one: cargo install --git https://github.com/$REPO" >&2
+        exit 2
+        ;;
+esac
+
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/keyfob/bin/$VERSION
+bin=$cache/keyfob
+if [ ! -x "$bin" ]; then
+    url=https://github.com/$REPO/releases/download/v$VERSION/keyfob-$target.tar.gz
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    echo "keyfob: fetching $VERSION for $target (once)" >&2
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$url" -o "$tmp/k.tar.gz" && curl -fsSL "$url.sha256" -o "$tmp/k.sha256"
+    else
+        wget -qO "$tmp/k.tar.gz" "$url" && wget -qO "$tmp/k.sha256" "$url.sha256"
+    fi
+    want=$(cut -d' ' -f1 <"$tmp/k.sha256")
+    if command -v sha256sum >/dev/null 2>&1; then got=$(sha256sum "$tmp/k.tar.gz" | cut -d' ' -f1); else got=$(shasum -a 256 "$tmp/k.tar.gz" | cut -d' ' -f1); fi
+    if [ -z "$want" ] || [ "$want" != "$got" ]; then
+        echo "keyfob: checksum mismatch for $url; not installed" >&2
+        exit 2
+    fi
+    tar -xzf "$tmp/k.tar.gz" -C "$tmp"
+    mkdir -p "$cache"
+    chmod 700 "$cache"
+    mv "$tmp/keyfob" "$bin"
+    chmod 755 "$bin"
+fi
+exec "$bin" "$@"

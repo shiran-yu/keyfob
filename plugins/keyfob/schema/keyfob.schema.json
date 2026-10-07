@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/yushiran/keyfob/main/plugins/keyfob/schema/keyfob.schema.json",
+  "title": "keyfob.json",
+  "description": "What a plugin (or a person) needs from keyfob. Put it at the plugin's root or in .claude-plugin/; personal ones go in ~/.config/keyfob/declarations.d/<name>.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "type": "string", "description": "Who declares this; shown as 'needed by <name>'. Defaults to the folder name." },
+    "secrets": {
+      "type": "object",
+      "description": "Each secret this plugin uses, by keyfob name.",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "env": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "The environment variable a command reads it from. Default: the name upper-cased, '-' and '.' as '_'." },
+          "description": { "type": "string" },
+          "obtain": { "type": "string", "description": "Where the user gets one: a URL or a sentence." },
+          "pattern": { "type": "string", "description": "A regex matching this kind of token, so a pasted one is stored under this name and the guard recognises it in a command." }
+        }
+      }
+    },
+    "groups": {
+      "type": "object",
+      "description": "Sets of secrets a command takes together: `keyfob run <group> -- <command>`.",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["env"],
+        "properties": {
+          "description": { "type": "string" },
+          "env": {
+            "type": "object",
+            "description": "ENV_VAR -> secret name.",
+            "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+            "additionalProperties": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" }
+          },
+          "require_for": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Regexes over a Bash command. Once the group is complete, a matching command that is not run under `keyfob run <group> --` is refused, with that fix in the message."
+          },
+          "check": {
+            "description": "How `keyfob check --live` asks the service whether the secrets still work.",
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["type", "url"],
+                "properties": {
+                  "type": { "const": "http" },
+                  "url": { "type": "string", "description": "${ENV_VAR} is filled in." },
+                  "method": { "type": "string", "default": "GET" },
+                  "headers": { "type": "object", "additionalProperties": { "type": "string" }, "description": "e.g. {\"Authorization\": \"Bearer ${OPENAI_API_KEY}\"}" },
+                  "basic": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 2, "description": "[user ENV_VAR, password ENV_VAR] for HTTP basic auth." },
+                  "ok": { "type": "array", "items": { "type": "integer" }, "default": [200] }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["type", "argv"],
+                "properties": {
+                  "type": { "const": "command" },
+                  "argv": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "Run with the group's secrets in its environment; exit 0 means they work." }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "deny_paths": { "type": "array", "items": { "type": "string" }, "description": "Files or folders holding this plugin's secrets in plaintext (e.g. ~/.binance); Bash commands reading them are refused." }
+      }
+    }
+  }
+}

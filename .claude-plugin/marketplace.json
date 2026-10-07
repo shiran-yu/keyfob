@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "keyfob",
+  "description": "keyfob: API tokens for Claude Code, kept in the OS keystore and handed to one command at a time",
+  "owner": { "name": "Shiran Yu", "url": "https://github.com/yushiran" },
+  "plugins": [
+    {
+      "name": "keyfob",
+      "description": "API tokens for Claude Code, your shell and your scripts: OS keystore (Keychain, Secret Service) or a 0600 file on servers; paste capture; a Bash guard; keyfob.json declarations for other plugins",
+      "source": "./plugins/keyfob",
+      "category": "security"
+    }
+  ]
+}
