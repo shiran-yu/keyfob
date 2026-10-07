@@ -108,4 +108,4 @@ plugins/keyfob`, `claude plugin test plugins/keyfob`. In a checkout the launcher
 `target/debug`. Releases: bump `version` in `Cargo.toml`, `plugin.json` and `VERSION=` in
 `plugins/keyfob/bin/keyfob`, then push a `v<version>` tag.
 
-Licensed under [CC BY-NC-SA 4.0](LICENSE): free to use, share and adapt with attribution, for non-commercial purposes, under the same license. Version 0.1.0 was published under MIT. Chinese: [README.zh-CN.md](README.zh-CN.md).
+Licensed under [CC BY-NC-SA 4.0](LICENSE): free to use, share and adapt with attribution, for non-commercial purposes, under the same license. Version 0.1.0 was published under MIT.
