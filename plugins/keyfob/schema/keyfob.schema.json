@@ -39,6 +39,11 @@
             "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
             "additionalProperties": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" }
           },
+          "optional": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+            "description": "Variables of `env` passed when their secret is stored and skipped when not: they never make `keyfob run <group>` fail or the group incomplete. For a script that uses a key when it has one."
+          },
           "require_for": {
             "type": "array",
             "items": { "type": "string" },

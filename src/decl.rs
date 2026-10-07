@@ -51,6 +51,7 @@ pub struct Group {
     pub description: String,
     pub check: Value,
     pub require_for: Vec<String>, // regexes a Bash command matching needs the group injected
+    pub optional: BTreeSet<String>, // VARs passed when stored, never required
     pub source: String,
 }
 
@@ -170,7 +171,16 @@ pub fn load() -> Decls {
                     }
                 }
                 let require_for = gv["require_for"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
-                d.groups.insert(gname.clone(), Group { env, description: s(&gv["description"]), check: gv["check"].clone(), require_for, source: source.clone() });
+                let mut optional = BTreeSet::new();
+                for var in gv["optional"].as_array().into_iter().flatten().filter_map(|x| x.as_str()) {
+                    if env.contains_key(var) {
+                        optional.insert(var.to_string());
+                    } else {
+                        d.problems.push(format!("{}: group {gname}: optional {var} is not one of its variables", util::tilde(&path)));
+                    }
+                }
+                // old: d.groups.insert(gname.clone(), Group { env, description: ..., check: ..., require_for, source: ... });
+                d.groups.insert(gname.clone(), Group { env, description: s(&gv["description"]), check: gv["check"].clone(), require_for, optional, source: source.clone() });
             }
         }
         for p in v["guard"]["deny_paths"].as_array().into_iter().flatten().filter_map(|x| x.as_str()) {

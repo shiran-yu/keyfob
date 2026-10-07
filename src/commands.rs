@@ -3,7 +3,7 @@
 use crate::decl::{self, Decls};
 use crate::guard;
 use crate::store::{self, Store};
-use crate::util::{self, check_name, fail, fail_code, parse_opts, valid_env, Fail, Secret, R};
+use crate::util::{self, check_name, default_env, fail, fail_code, parse_opts, valid_env, Fail, Secret, R};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -19,6 +19,8 @@ for, for its own run. Plugins say what they need in a keyfob.json of their own; 
 
   keyfob add <name> [--env VAR] [--note TEXT] [--from-env VAR | --stdin]
                                    store a secret; asks on the terminal without echo by default
+  keyfob request <name> [--env VAR] --reason TEXT [--obtain URL] [--json]
+                                   record that a secret is wanted (no value); /keyfob lists it to add
   keyfob run <group|name|name=VAR>... -- <command> [args]
                                    run a command with those secrets in its environment (alias: env)
   keyfob ls [--json]               what is stored or declared, where, who needs it; never values
@@ -53,6 +55,7 @@ pub fn main(args: Vec<String>) -> i32 {
             Ok(())
         }
         "add" | "set" => add(rest),
+        "request" => request(rest),
         "get" => get(rest),
         "rm" | "delete" => rm(rest),
         "rename" | "mv" => rename(rest),
@@ -124,6 +127,57 @@ fn add(args: &[String]) -> R<()> {
         &[("backend", Some(json!(st.name()))), ("env", o.get("--env").map(|e| json!(e))), ("note", o.get("--note").map(|n| json!(n))), ("length", Some(json!(value.chars().count())))],
     )?;
     println!("stored {name} ({} characters) in {}", value.chars().count(), st.name());
+    Ok(())
+}
+
+// ------------------------------------------------------------------ request
+const REQUESTED: &str = "requested";
+
+/// Records a wanted secret in the person's own declaration file, so `ls` and /keyfob list it by name; no value
+/// passes through here. A name another declaration already holds is left to that declaration.
+fn request(args: &[String]) -> R<()> {
+    let usage = "usage: keyfob request <name> [--env VAR] --reason TEXT [--obtain URL] [--json]";
+    let Some(name) = args.first() else { return fail(usage) };
+    check_name(name)?;
+    let o = parse_opts(&args[1..], &[("--env", true), ("--reason", true), ("--obtain", true), ("--json", false)])?;
+    let reason = o.get("--reason").map(|r| r.trim().to_string()).unwrap_or_default();
+    if reason.is_empty() {
+        return fail(format!("{usage}: say why it is wanted"));
+    }
+    if let Some(env) = o.get("--env") {
+        if !valid_env(env) {
+            return fail(format!("'{env}' is not an environment variable name"));
+        }
+    }
+    let as_json = o.contains_key("--json");
+    let d = decl::load();
+    let stored = store::open()?.get(name)?.is_some();
+    if let Some(sd) = d.secrets.get(name).filter(|s| s.source != REQUESTED) {
+        if as_json {
+            println!("{}", json!({ "name": name, "env": sd.env, "stored": stored, "declared_by": sd.source }));
+        } else {
+            println!("{name} is already declared by {} (${}){}", sd.source, sd.env, if stored { ", and stored" } else { "" });
+        }
+        return Ok(());
+    }
+    let env = o.get("--env").cloned().unwrap_or_else(|| default_env(name));
+    let path = util::config_dir().join("declarations.d").join(format!("{REQUESTED}.json"));
+    let mut doc = util::load_json(&path).filter(|v| v.is_object()).unwrap_or_else(|| json!({}));
+    doc["name"] = json!(REQUESTED);
+    if !doc["secrets"].is_object() {
+        doc["secrets"] = json!({});
+    }
+    let mut entry = json!({ "env": env, "description": reason });
+    if let Some(ob) = o.get("--obtain").map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        entry["obtain"] = json!(ob);
+    }
+    doc["secrets"][name.as_str()] = entry;
+    util::save_json(&path, &doc)?;
+    if as_json {
+        println!("{}", json!({ "name": name, "env": env, "stored": stored, "declared_by": REQUESTED }));
+    } else {
+        println!("requested {name} (${env}){}", if stored { "; it is already stored" } else { "" });
+    }
     Ok(())
 }
 
@@ -207,6 +261,11 @@ fn resolve(specs: &[String], d: &Decls) -> R<Vec<(String, String)>> {
     Ok(pairs)
 }
 
+/// The variables of the named groups that are optional: passed when stored, never required.
+fn optional_vars(specs: &[String], d: &Decls) -> BTreeSet<String> {
+    specs.iter().filter_map(|s| d.groups.get(s)).flat_map(|g| g.optional.iter().cloned()).collect()
+}
+
 fn run(args: &[String]) -> R<()> {
     let usage = "usage: keyfob run <group|name|name=VAR>... -- <command> [args]";
     let Some(cut) = args.iter().position(|a| a == "--") else { return fail(usage) };
@@ -216,6 +275,7 @@ fn run(args: &[String]) -> R<()> {
     }
     let d = decl::load();
     let pairs = resolve(specs, &d)?;
+    let optional = optional_vars(specs, &d);
     let st = store::open()?;
     let mut cmd = std::process::Command::new(&command[0]);
     cmd.args(&command[1..]);
@@ -225,6 +285,7 @@ fn run(args: &[String]) -> R<()> {
             Some(v) => {
                 cmd.env(var, v.as_str());
             }
+            None if optional.contains(var) => {} // an optional member: the command runs without it
             None => {
                 missing.insert(name.clone());
             }
@@ -235,7 +296,8 @@ fn run(args: &[String]) -> R<()> {
             Some(o) => format!("{m} (get one at {o})"),
             None => m.clone(),
         }).collect();
-        return fail_code(3, format!("missing {}. Store each once: paste `keyfob: <name> <token>` into Claude Code, or run `keyfob add <name>` in your terminal", hints.join(", ")));
+        // old: ... Store each once: paste `keyfob: <name> <token>` into Claude Code, or run `keyfob add <name>` ...
+        return fail_code(3, format!("missing {}. Store each once: in Claude Code, Claude asks with keyfob_request and /keyfob opens on it (or open /keyfob yourself); in a terminal, `keyfob add <name>`", hints.join(", ")));
     }
     let mut active: BTreeSet<String> = std::env::var("KEYFOB_ACTIVE").unwrap_or_default().split(',').filter(|s| !s.is_empty()).map(String::from).collect();
     active.extend(specs.iter().filter(|s| d.groups.contains_key(*s)).cloned());
@@ -290,10 +352,12 @@ fn collect(st: &dyn Store) -> R<(Decls, BTreeSet<String>, Vec<Row>)> {
 fn group_status(d: &Decls, have: &BTreeSet<String>) -> Map<String, Value> {
     let mut out = Map::new();
     for (name, g) in &d.groups {
-        let missing: BTreeSet<&String> = g.env.values().filter(|s| !have.contains(*s)).collect();
+        // old: let missing: BTreeSet<&String> = g.env.values().filter(|s| !have.contains(*s)).collect();
+        let missing: BTreeSet<&String> = g.env.iter().filter(|(v, s)| !g.optional.contains(*v) && !have.contains(*s)).map(|(_, s)| s).collect();
+        let optional_missing: BTreeSet<&String> = g.env.iter().filter(|(v, s)| g.optional.contains(*v) && !have.contains(*s)).map(|(_, s)| s).collect();
         out.insert(
             name.clone(),
-            json!({ "complete": missing.is_empty(), "missing": missing, "env": g.env.keys().collect::<Vec<_>>(), "source": g.source, "description": g.description }),
+            json!({ "complete": missing.is_empty(), "missing": missing, "optional_missing": optional_missing, "env": g.env.keys().collect::<Vec<_>>(), "optional": g.optional, "source": g.source, "description": g.description }),
         );
     }
     out

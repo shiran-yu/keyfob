@@ -6,6 +6,9 @@ API tokens for Claude Code, your shell and your scripts, kept out of everyone's 
   with neither, one `0600` file in a `0700` folder (what Claude Code itself does for its own login on Linux).
 - **Handed to one command at a time**: `keyfob run openai -- python3 eval.py`. Nothing is exported into your
   shell, so nothing else (and no model) can read it from the environment.
+- **Asked for by name**: when Claude needs a key it calls `keyfob_request`; `/keyfob` opens on that secret with
+  a masked field (bullets on screen), you paste and press store, and a prompt tells Claude to go on. The value
+  never becomes a message.
 - **Pasted straight into the chat**: send `keyfob: s2-key <token>` to Claude Code and the plugin stores it before
   the message is kept; the model and the transcript get `keyfob: s2-key [stored in keyfob]`. A bare token it
   recognises (OpenAI, Anthropic, GitHub, Hugging Face, AWS, Slack, Google, Stripe, JWT) is stored as `pasted-1`.
@@ -44,6 +47,7 @@ keyfob doctor                                   # storage in use; plaintext secr
 | Command | Does |
 |---|---|
 | `add <name> [--env VAR] [--note T] [--from-env VAR \| --stdin]` | store; asks on the terminal by default |
+| `request <name> [--env VAR] --reason T [--obtain URL]` | record that a secret is wanted (no value) in `~/.config/keyfob/declarations.d/requested.json`; `/keyfob` lists it to add |
 | `run <group\|name\|name=VAR>... -- <cmd>` | run `cmd` with those secrets in its environment (`env` is an alias) |
 | `ls`, `check [--live]`, `which VAR`, `decls`, `doctor` | look, never show values; `--json` on each |
 | `get <name>` | print a value: your terminal, your programs (the guard refuses it in Claude's Bash) |
@@ -78,6 +82,9 @@ Put it at your plugin's root. keyfob reads it from every enabled plugin; people 
   "guard": { "deny_paths": ["~/.config/scholar/keys.env"] }
 }
 ```
+
+A group may list `"optional": ["S2_API_KEY"]`: those variables are passed when stored and skipped when not,
+so `keyfob run scholar --` runs whether or not the person has that key.
 
 Your scripts read the variables; your docs say `keyfob run scholar -- <command>`. An MCP server that needs a
 key is started as `keyfob run <name> -- <server command>` in its MCP config.

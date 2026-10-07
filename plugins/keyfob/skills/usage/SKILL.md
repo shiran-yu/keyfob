@@ -18,10 +18,19 @@ description: Use whenever a command, script or MCP server needs an API key, toke
    instead; do that. To test that a variable is set: `[ -n "$VAR" ] && echo set`.
 3. **Scripts read secrets from the environment** (`os.environ["S2_API_KEY"]`), never from a file path or an
    argument, and never print them.
-4. **The user adds a secret, not you.** Say: paste `keyfob: <name> <token>` into the chat (optionally a third
-   word, the variable, e.g. `keyfob: s2-key abc123 S2_API_KEY`); it is stored before the message is kept, and
-   you see `keyfob: s2-key [stored in keyfob]`. Or `/keyfob`, or `keyfob add <name>` in their own terminal.
-   `keyfob add <name> --from-env VAR` is yours to run when the value is already in your environment.
+4. **The user adds a secret, not you; you ask for it with `keyfob_request`.** Call it with `secret` (the name,
+   `<service>-<kind>`: openreview-password, github-token, openalex-key; reuse a name `keyfob_status` lists),
+   `env` (the variable), `reason` (one line the person sees) and, when you know it, `obtain` (where to get
+   one). `/keyfob` opens on that secret with a masked field and the tool returns at once:
+   - `opened`: say in one line what to paste, then end your turn. When the person stores it, a prompt from
+     keyfob says `<name> is now stored`; go on with `keyfob run <name>=<VAR> -- <command>`. If they put it
+     off, the prompt says so: say what cannot run without it.
+   - `stored`: it is already there; run the command as the result says.
+   - `waiting`: the terminal is too narrow to open the panel; tell the person to type `/keyfob`.
+   Never ask for a value in chat. The person may also open `/keyfob` themselves, run `keyfob add <name>` in
+   their own terminal, or paste `keyfob: <name> <token>` (stored before the message is kept; a value with a
+   space, or a password, is safer in the panel). `keyfob add <name> --from-env VAR` is yours to run when the
+   value is already in your environment.
 5. **A token pasted without the `keyfob:` line** is stored as `pasted-N` and replaced by `[keyfob:pasted-N]`;
    ask what it is for, then `keyfob rename pasted-N <name>`.
 6. **Deleting** (`keyfob rm`) asks the user first. Do not try to work around it.
@@ -62,6 +71,8 @@ of every enabled plugin by itself. Schema: `schema/keyfob.schema.json` in this p
 `require_for`: once the group is complete, a Bash command matching one of the regexes that is not run under
 `keyfob run <group> --` is refused, with the fix in the message. `check`: `http` (with `${VAR}` in the URL or
 headers, or `basic: [USER_VAR, PASS_VAR]`) or `command` (`argv`, exit 0 means the secrets work).
+`optional`: variables of `env` that `keyfob run <group>` passes when stored and skips when not, so a script
+that uses a key when it has one runs either way; they never make the group incomplete.
 
 ## Where values live
 

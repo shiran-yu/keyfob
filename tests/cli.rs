@@ -244,3 +244,85 @@ fn declarations_of_a_folder_marketplace_come_from_its_source() {
     let v: serde_json::Value = serde_json::from_str(&out(&c.output().unwrap())).unwrap();
     assert!(v["groups"]["g"].is_null());
 }
+
+const OPTIONAL_DECL: &str = r#"{
+  "name": "litrev",
+  "groups": {
+    "lit": { "env": { "OPENALEX_API_KEY": "openalex-key", "S2_API_KEY": "s2-key", "MUST": "must-key" },
+             "optional": ["OPENALEX_API_KEY", "S2_API_KEY"] },
+    "odd": { "env": { "A": "a-key" }, "optional": ["NOT_A_VAR"] }
+  }
+}"#;
+
+fn check_json(e: &Env) -> serde_json::Value {
+    serde_json::from_str(&out(&e.run(&["check", "--json"], None))).unwrap()
+}
+
+#[test]
+fn optional_group_members() {
+    let e = Env::new();
+    e.decl(OPTIONAL_DECL);
+    // only a required member decides completeness and whether run starts
+    let v = check_json(&e);
+    assert_eq!(v["groups"]["lit"]["complete"], false);
+    assert_eq!(v["groups"]["lit"]["missing"], serde_json::json!(["must-key"]));
+    assert_eq!(v["groups"]["lit"]["optional_missing"], serde_json::json!(["openalex-key", "s2-key"]));
+    let miss = e.run(&["run", "lit", "--", "sh", "-c", "echo ran"], None);
+    assert_eq!(miss.status.code(), Some(3));
+    let err = String::from_utf8_lossy(&miss.stderr).into_owned();
+    assert!(err.contains("must-key") && !err.contains("s2-key"), "{err}");
+    e.run(&["add", "must-key", "--stdin"], Some("mmmmmmmm"));
+    e.run(&["add", "openalex-key", "--stdin"], Some("oooooooo"));
+    let v = check_json(&e);
+    assert_eq!(v["groups"]["lit"]["complete"], true);
+    assert_eq!(v["groups"]["lit"]["optional_missing"], serde_json::json!(["s2-key"]));
+    // a stored optional member is passed, a missing one is simply absent
+    let ok = e.run(&["run", "lit", "--", "sh", "-c", "test \"$MUST\" = mmmmmmmm && test \"$OPENALEX_API_KEY\" = oooooooo && test -z \"${S2_API_KEY+x}\""], None);
+    assert!(ok.status.success(), "{}", String::from_utf8_lossy(&ok.stderr));
+    // an optional name that is not one of the group's variables is a problem line
+    assert!(v["problems"].to_string().contains("NOT_A_VAR"), "{}", v["problems"]);
+}
+
+#[test]
+fn request_records_a_wanted_secret_without_a_value() {
+    let e = Env::new();
+    let o = e.run(&["request", "openreview-password", "--env", "OPENREVIEW_PASSWORD", "--reason", "log in to OpenReview",
+                    "--obtain", "https://openreview.net", "--json"], None);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let v: serde_json::Value = serde_json::from_str(&out(&o)).unwrap();
+    assert_eq!(v["name"], "openreview-password");
+    assert_eq!(v["env"], "OPENREVIEW_PASSWORD");
+    assert_eq!(v["stored"], false);
+    assert_eq!(v["declared_by"], "requested");
+    let file = e.home().join(".config/keyfob/declarations.d/requested.json");
+    assert_eq!(mode(&file), 0o600);
+    assert_eq!(mode(file.parent().unwrap()), 0o700);
+    // a second request merges; the first stays
+    assert!(e.run(&["request", "s2-key", "--reason", "search"], None).status.success());
+    let f: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(f["secrets"]["openreview-password"]["description"], "log in to OpenReview");
+    assert_eq!(f["secrets"]["s2-key"]["env"], "S2_KEY");
+    // ls shows what is wanted and why
+    let ls: serde_json::Value = serde_json::from_str(&out(&e.run(&["ls", "--json"], None))).unwrap();
+    let row = ls["secrets"].as_array().unwrap().iter().find(|s| s["name"] == "openreview-password").unwrap().clone();
+    assert_eq!(row["stored"], false);
+    assert_eq!(row["declared_by"], "requested");
+    assert_eq!(row["obtain"], "https://openreview.net");
+    // asking again replaces the reason
+    assert!(e.run(&["request", "s2-key", "--reason", "search again"], None).status.success());
+    let f: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(f["secrets"]["s2-key"]["description"], "search again");
+    // a name a plugin already declares is not written again
+    e.decl(DECL);
+    let o = e.run(&["request", "demo-key", "--reason", "x", "--json"], None);
+    assert!(o.status.success());
+    let v: serde_json::Value = serde_json::from_str(&out(&o)).unwrap();
+    assert_eq!(v["declared_by"], "demo-plugin");
+    let f: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert!(f["secrets"]["demo-key"].is_null());
+    // bad input is refused
+    assert!(!e.run(&["request", "Bad Name", "--reason", "x"], None).status.success());
+    assert!(!e.run(&["request", "ok-name", "--env", "1BAD", "--reason", "x"], None).status.success());
+    assert!(!e.run(&["request", "ok-name"], None).status.success());
+    assert!(!e.run(&["request", "ok-name", "--reason", "  "], None).status.success());
+}
