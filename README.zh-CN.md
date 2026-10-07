@@ -60,4 +60,4 @@ keyfob doctor                                   # 现在用哪种存储；shell 
 - 在源码目录里运行时，启动脚本直接用 `target/release` 或 `target/debug` 里编译好的程序。
 - 发版：同时改 `Cargo.toml`、`plugin.json` 里的 `version` 和 `plugins/keyfob/bin/keyfob` 里的 `VERSION=`，然后推一个 `v<版本号>` 标签，GitHub 会自动编译四个平台并发布。
 
-MIT 许可。
+许可证：[CC BY-NC-SA 4.0](LICENSE)（署名、非商业性使用、相同方式共享）。0.1.0 版曾以 MIT 发布。

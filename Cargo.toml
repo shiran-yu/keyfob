@@ -1,10 +1,10 @@
 [package]
 name = "keyfob"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.80"
 description = "API tokens for your shell, your scripts and Claude Code: kept in the OS keystore (or a 0600 file on servers) and handed to one command at a time"
-license = "MIT"
+license = "CC-BY-NC-SA-4.0"
 repository = "https://github.com/yushiran/keyfob"
 readme = "README.md"
 keywords = ["secrets", "keychain", "claude-code", "cli", "tokens"]
