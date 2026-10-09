@@ -40,7 +40,12 @@ impl Env {
         let mut c = self.cmd(args);
         c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         let mut child = c.spawn().unwrap();
-        child.stdin.take().unwrap().write_all(stdin.unwrap_or("").as_bytes()).unwrap();
+        // old: child.stdin.take().unwrap().write_all(stdin.unwrap_or("").as_bytes()).unwrap();
+        // a child that refuses its arguments can exit before reading stdin; the write then meets a
+        // closed pipe (flaky on the ubuntu-24.04-arm runner), and the exit status is what the test checks
+        if let Err(err) = child.stdin.take().unwrap().write_all(stdin.unwrap_or("").as_bytes()) {
+            assert_eq!(err.kind(), std::io::ErrorKind::BrokenPipe, "{err}");
+        }
         child.wait_with_output().unwrap()
     }
 }
