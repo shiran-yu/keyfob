@@ -2,9 +2,9 @@
   "name": "keyfob",
   "version": "0.2.0",
   "description": "Keep your API keys and tokens out of your Claude Code conversations: tokens pasted as keyfob: lines are stored before the model sees them, Claude asks for a key through the /keyfob panel, a guard stops Bash commands that would print one, and each command gets only the keys it needs from the OS keystore",
-  "author": { "name": "Shiran Yu", "url": "https://github.com/yushiran" },
-  "homepage": "https://github.com/yushiran/keyfob",
-  "repository": "https://github.com/yushiran/keyfob",
+  "author": { "name": "Shiran Yu", "url": "https://github.com/shiran-yu" },
+  "homepage": "https://github.com/shiran-yu/keyfob",
+  "repository": "https://github.com/shiran-yu/keyfob",
   "license": "CC-BY-NC-SA-4.0",
   "keywords": ["secrets", "api-keys", "tokens", "keychain", "secret-service", "security"]
 }

@@ -8,9 +8,9 @@ Paste a token as `keyfob: <name> <token>` and the model sees `[stored in keyfob]
 key it asks for it by name, and you paste it into a field that redraws it as bullets. A command gets the
 key for its own run, and nothing is exported into your shell.
 
-[![version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/yushiran/keyfob/releases)
+[![version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/shiran-yu/keyfob/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-plugin-D97757)](https://github.com/anthropics/claude-code)
-[![platforms](https://img.shields.io/badge/macOS_%C2%B7_Linux-arm64_%C2%B7_x86__64-2ea44f)](https://github.com/yushiran/keyfob/releases)
+[![platforms](https://img.shields.io/badge/macOS_%C2%B7_Linux-arm64_%C2%B7_x86__64-2ea44f)](https://github.com/shiran-yu/keyfob/releases)
 [![licence](https://img.shields.io/badge/licence-CC_BY--NC--SA_4.0-lightgrey)](LICENSE)
 
 ![In Claude Code: a token pasted into the chat is stored and replaced by "[stored in keyfob]" before the model sees it; then Claude asks for the Semantic Scholar key by name, the /keyfob panel opens on it, the key goes into its field and is redrawn as bullets, and Claude carries on with keyfob run. All keys in the recording are made up.](assets/claude-code.gif)
@@ -22,7 +22,7 @@ key for its own run, and nothing is exported into your shell.
 Tell Claude Code:
 
 ```
-Install https://github.com/yushiran/keyfob
+Install https://github.com/shiran-yu/keyfob
 ```
 
 It adds the plugin and asks you to restart. The keyfob binary comes with it: fetched once for your machine
@@ -31,7 +31,7 @@ and checked against the release's SHA-256.
 <details>
 <summary>What Claude runs</summary>
 
-1. `claude plugin marketplace add yushiran/keyfob`
+1. `claude plugin marketplace add shiran-yu/keyfob`
 2. `claude plugin install keyfob@keyfob`
 3. Ask the user to restart Claude Code. On first use the plugin's launcher downloads
    `keyfob-<target>.tar.gz` from the matching release and checks it against its `.sha256`.
@@ -39,8 +39,8 @@ and checked against the release's SHA-256.
 </details>
 
 On its own, for a server or a script: download `keyfob-<target>.tar.gz` from
-[Releases](https://github.com/yushiran/keyfob/releases) and check it against its `.sha256`, or
-`cargo install --git https://github.com/yushiran/keyfob`.
+[Releases](https://github.com/shiran-yu/keyfob/releases) and check it against its `.sha256`, or
+`cargo install --git https://github.com/shiran-yu/keyfob`.
 
 ## Why
 

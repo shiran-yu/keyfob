@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/yushiran/keyfob/main/plugins/keyfob/schema/keyfob.schema.json",
+  "$id": "https://raw.githubusercontent.com/shiran-yu/keyfob/main/plugins/keyfob/schema/keyfob.schema.json",
   "title": "keyfob.json",
   "description": "What a plugin (or a person) needs from keyfob. Put it at the plugin's root or in .claude-plugin/; personal ones go in ~/.config/keyfob/declarations.d/<name>.json.",
   "type": "object",

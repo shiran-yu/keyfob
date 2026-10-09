@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "keyfob",
   "description": "keyfob: keep your API keys and tokens out of your Claude Code conversations",
-  "owner": { "name": "Shiran Yu", "url": "https://github.com/yushiran" },
+  "owner": { "name": "Shiran Yu", "url": "https://github.com/shiran-yu" },
   "plugins": [
     {
       "name": "keyfob",
