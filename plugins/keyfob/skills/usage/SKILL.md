@@ -1,9 +1,12 @@
 ---
 name: usage
-description: Use whenever a command, script or MCP server needs an API key, token or password, when one fails with 401/403 or "missing key", when the user pastes or mentions a token, asks where their keys are, wants to add, rotate or remove one, or when a plugin's keyfob.json is being written. keyfob keeps the values (macOS Keychain, Linux Secret Service, or a 0600 file on servers) and hands them to one command at a time; Claude never sees them.
+description: Use whenever a command, script or MCP server needs an API key, token or password, when one fails with 401/403 or "missing key", when the user pastes or mentions a token, asks where their keys are, wants to add, rotate or remove one, or when a plugin's keyfob.json is being written. keyfob keeps values in the OS keystore (or a 0600 file on servers) and hands them to one command at a time without exposing them to the agent.
 ---
 
 # keyfob: using secrets without seeing them
+
+The packaged launcher is `../../bin/keyfob` relative to this skill. Resolve it to an absolute path before
+running commands; use a `keyfob` already on `PATH` only when it is the same installation.
 
 ## Rules
 
@@ -18,36 +21,42 @@ description: Use whenever a command, script or MCP server needs an API key, toke
    instead; do that. To test that a variable is set: `[ -n "$VAR" ] && echo set`.
 3. **Scripts read secrets from the environment** (`os.environ["S2_API_KEY"]`), never from a file path or an
    argument, and never print them.
-4. **The user adds a secret, not you; you ask for it with `keyfob_request`.** Call it with `secret` (the name,
-   `<service>-<kind>`: openreview-password, github-token, openalex-key; reuse a name `keyfob_status` lists),
-   `env` (the variable), `reason` (one line the person sees) and, when you know it, `obtain` (where to get
-   one). `/keyfob` opens on that secret with a masked field and the tool returns at once:
+4. **The user adds a secret, not you. Never ask for its value in normal chat.** Use a stable name such as
+   `openreview-password`, `github-token`, or `openalex-key`; reuse a name `keyfob ls --json` already lists.
+   - **In Codex**, run `keyfob request <name> --env <VAR> --reason <text> [--obtain <URL>]`, then ask the user
+     to run `keyfob add <name> --env <VAR>` in their own terminal. After they say it is stored, verify with
+     `keyfob ls --json` and continue under `keyfob run`. When the user has explicitly trusted the plugin hooks,
+     a one-line `keyfob: <name> <token> [VAR]` prompt is also captured and blocked before the model sees it;
+     they must then resend the request without the value. Terminal entry remains the preferred path.
+   - **In Claude Code**, call `keyfob_request` with `secret`, `env`, `reason`, and optional `obtain`.
+     `/keyfob` opens on that secret with a masked field and the tool returns at once:
    - `opened`: say in one line what to paste, then end your turn. When the person stores it, a prompt from
      keyfob says `<name> is now stored`; go on with `keyfob run <name>=<VAR> -- <command>`. If they put it
      off, the prompt says so: say what cannot run without it.
    - `stored`: it is already there; run the command as the result says.
    - `waiting`: the terminal is too narrow to open the panel; tell the person to type `/keyfob`.
-   Never ask for a value in chat. The person may also open `/keyfob` themselves, run `keyfob add <name>` in
-   their own terminal, or paste `keyfob: <name> <token>` (stored before the message is kept; a value with a
-   space, or a password, is safer in the panel). `keyfob add <name> --from-env VAR` is yours to run when the
-   value is already in your environment.
-5. **A token pasted without the `keyfob:` line** is stored as `pasted-N` and replaced by `[keyfob:pasted-N]`;
-   ask what it is for, then `keyfob rename pasted-N <name>`.
-6. **Deleting** (`keyfob rm`) asks the user first. Do not try to work around it.
+     The person may also open `/keyfob` themselves or run `keyfob add <name>` in their own terminal.
+   `keyfob add <name> --from-env VAR` is safe for the agent to run when the value is already in its environment.
+5. **A recognised token pasted without a `keyfob:` line** is stored as `pasted-N`. In Claude Code the prompt
+   is rewritten with `[keyfob:pasted-N]`; in Codex the prompt is blocked and must be resent without the value.
+   Ask what it is for, then `keyfob rename pasted-N <name>`.
+6. **Deleting** (`keyfob rm`) requires the user. Claude Code asks for approval; Codex blocks it because
+   PreToolUse cannot request approval yet, so tell the user to run the deletion in their own terminal.
 
 ## Finding out what exists
 
-- The `keyfob_status` tool, or `keyfob ls --json` / `keyfob check --json`: names, the variable each goes into,
-  who needs it, which groups are complete. `keyfob check --live` asks each service whether its secrets work.
+- In Claude Code, the `keyfob_status` tool is available. In both hosts, `keyfob ls --json` and
+  `keyfob check --json` show names, variables, consumers, and complete groups without values.
+  `keyfob check --live` asks each declared service whether its secrets work.
 - `keyfob which <VAR>`: the group and secret behind a variable.
-- `keyfob doctor`: the storage in use, and plaintext secrets left in shell rc files or Claude settings (names
+- `keyfob doctor`: the storage in use, and plaintext secrets left in shell rc files or agent settings (names
   only). For each: `keyfob add <name> --from-env VAR` (if it is in your environment), then the user deletes the
   line. An MCP server that read the variable from settings is then started as `keyfob run <name> -- <server>`.
 
 ## Declaring what a plugin needs: keyfob.json
 
-At the plugin's root (personal ones in `~/.config/keyfob/declarations.d/<name>.json`). keyfob finds the files
-of every enabled plugin by itself. Schema: `schema/keyfob.schema.json` in this plugin.
+At the plugin's root (personal ones in `~/.config/keyfob/declarations.d/<name>.json`). keyfob finds declarations
+in enabled Claude Code plugins and installed Codex plugin caches. Schema: `schema/keyfob.schema.json` here.
 
 ```json
 {

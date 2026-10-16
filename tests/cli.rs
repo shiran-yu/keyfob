@@ -250,6 +250,24 @@ fn declarations_of_a_folder_marketplace_come_from_its_source() {
     assert!(v["groups"]["g"].is_null());
 }
 
+#[test]
+fn declarations_are_read_from_the_codex_plugin_cache() {
+    let e = Env::new();
+    let codex = e.dir.path().join("codex");
+    let plugin = codex.join("plugins/cache/local/literature/1.2.3");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(
+        plugin.join("keyfob.json"),
+        r#"{"name":"literature","groups":{"search":{"env":{"S2_API_KEY":"s2-key"}}}}"#,
+    )
+    .unwrap();
+    let mut c = e.cmd(&["decls", "--json"]);
+    c.env_remove("KEYFOB_NO_PLUGINS").env("CODEX_HOME", &codex);
+    let o = c.output().unwrap();
+    let v: serde_json::Value = serde_json::from_str(&out(&o)).unwrap();
+    assert_eq!(v["groups"]["search"]["env"]["S2_API_KEY"], "s2-key", "{}", out(&o));
+}
+
 const OPTIONAL_DECL: &str = r#"{
   "name": "litrev",
   "groups": {

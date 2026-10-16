@@ -65,7 +65,7 @@ pub struct Decls {
 }
 
 /// keyfob.json files from: ~/.config/keyfob/declarations.d/*.json, KEYFOB_DECLARATIONS (files or folders,
-/// ':'-separated), and the root (or .claude-plugin/) of every enabled Claude Code plugin.
+/// ':'-separated), enabled Claude Code plugins, and installed Codex plugins.
 pub fn files() -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = vec![];
     if let Ok(rd) = std::fs::read_dir(util::config_dir().join("declarations.d")) {
@@ -83,7 +83,11 @@ pub fn files() -> Vec<PathBuf> {
         let installed = util::load_json(&claude.join("plugins/installed_plugins.json")).unwrap_or(Value::Null);
         let enabled = util::load_json(&claude.join("settings.json")).map(|v| v["enabledPlugins"].clone()).unwrap_or(Value::Null);
         let markets = util::load_json(&claude.join("plugins/known_marketplaces.json")).unwrap_or(Value::Null);
-        let declared_in = |root: &Path| -> Option<PathBuf> { [root.join("keyfob.json"), root.join(".claude-plugin/keyfob.json")].into_iter().find(|p| p.is_file()) };
+        let declared_in = |root: &Path| -> Option<PathBuf> {
+            [root.join("keyfob.json"), root.join(".claude-plugin/keyfob.json"), root.join(".codex-plugin/keyfob.json")]
+                .into_iter()
+                .find(|p| p.is_file())
+        };
         if let Some(plugins) = installed["plugins"].as_object() {
             for (key, entries) in plugins {
                 if enabled[key.as_str()].as_bool() != Some(true) {
@@ -109,6 +113,30 @@ pub fn files() -> Vec<PathBuf> {
                         break;
                     }
                 }
+            }
+        }
+
+        // Codex caches installed marketplace plugins as cache/<market>/<plugin>/<version>.
+        // It currently has no stable machine-readable installed-plugin index, so declarations
+        // are read from every cached version and de-duplicated below. Newer files win by the
+        // normal first-declaration rule only when names do not collide.
+        let cache = util::codex_dir().join("plugins/cache");
+        if let Ok(markets) = std::fs::read_dir(cache) {
+            for market in markets.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+                let Ok(plugins) = std::fs::read_dir(market) else { continue };
+                for plugin in plugins.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+                    let Ok(versions) = std::fs::read_dir(plugin) else { continue };
+                    for version in versions.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+                        if let Some(found) = declared_in(&version) {
+                            out.push(found);
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(root) = std::env::var_os("PLUGIN_ROOT").map(PathBuf::from) {
+            if let Some(found) = declared_in(&root) {
+                out.push(found);
             }
         }
     }

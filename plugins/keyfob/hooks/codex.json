@@ -1,0 +1,30 @@
+{
+  "description": "keyfob: capture sensitive prompts and guard shell commands in Codex",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/hooks/codex_capture.py\" \"${PLUGIN_ROOT}/bin/keyfob\"",
+            "timeout": 60,
+            "statusMessage": "Checking prompt for secrets"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/hooks/codex_guard.py\" \"${PLUGIN_ROOT}/bin/keyfob\"",
+            "timeout": 60,
+            "statusMessage": "Checking command for secrets"
+          }
+        ]
+      }
+    ]
+  }
+}

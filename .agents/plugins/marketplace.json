@@ -1,0 +1,20 @@
+{
+  "name": "keyfob-local",
+  "interface": {
+    "displayName": "keyfob local"
+  },
+  "plugins": [
+    {
+      "name": "keyfob",
+      "source": {
+        "source": "local",
+        "path": "./plugins/keyfob"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

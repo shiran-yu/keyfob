@@ -2,14 +2,14 @@
 
 # keyfob
 
-**Keep your API keys and tokens out of your Claude Code conversations.**
+**Keep your API keys and tokens out of Claude Code and Codex conversations.**
 
-Paste a token as `keyfob: <name> <token>` and the model sees `[stored in keyfob]`. When Claude needs a
-key it asks for it by name, and you paste it into a field that redraws it as bullets. A command gets the
-key for its own run, and nothing is exported into your shell.
+Store a token once, let a command receive it for one run, and export nothing into your shell. Claude Code
+includes a masked `/keyfob` panel; Codex uses the same CLI, skill, prompt capture and shell guard.
 
 [![version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/shiran-yu/keyfob/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-plugin-D97757)](https://github.com/anthropics/claude-code)
+[![Codex](https://img.shields.io/badge/Codex-plugin-111827)](https://developers.openai.com/plugins/build/plugins)
 [![platforms](https://img.shields.io/badge/macOS_%C2%B7_Linux-arm64_%C2%B7_x86__64-2ea44f)](https://github.com/shiran-yu/keyfob/releases)
 [![licence](https://img.shields.io/badge/licence-CC_BY--NC--SA_4.0-lightgrey)](LICENSE)
 
@@ -18,6 +18,21 @@ key for its own run, and nothing is exported into your shell.
 </div>
 
 ## Install
+
+### Codex
+
+```sh
+git clone https://github.com/shiran-yu/keyfob.git
+cd keyfob
+codex plugin marketplace add "$PWD"
+codex plugin add keyfob@keyfob-local
+```
+
+Start a new Codex thread, then review and trust the plugin hooks when prompted. The hooks run locally and
+therefore are not available in Codex Cloud or the public universal plugin directory. The launcher downloads
+the matching release binary once and verifies its SHA-256.
+
+### Claude Code
 
 Tell Claude Code:
 
@@ -44,9 +59,9 @@ On its own, for a server or a script: download `keyfob-<target>.tar.gz` from
 
 ## Why
 
-A token pasted into Claude Code becomes part of the conversation: the model reads it, and the transcript on
-disk keeps it. A key exported in `~/.bashrc` sits in the environment of every process you start, Claude's
-shell included, and one `env` or `cat .env` prints it into the conversation as well. keyfob keeps the value
+A token pasted into an agent chat can reach the model and local transcript. A key exported in `~/.bashrc`
+sits in the environment of every process you start, and one `env` or `cat .env` can print it into the
+conversation. keyfob keeps the value
 in the OS keystore (or a `0600` file where there is none) and hands it to one command at a time, so the
 model never needs to see it. What this covers, and what it does not, is [below](#what-it-protects-and-what-it-does-not).
 
@@ -69,17 +84,34 @@ model never needs to see it. What this covers, and what it does not, is [below](
   plugin enabled in your user settings, `/keyfob` shows what is missing and where to get it, and
   `keyfob check --live` asks each service a group declares a check for whether its keys still work.
 
+## In Codex
+
+- **The same skill and shell guard work locally.** Codex exposes shell calls to `PreToolUse` as `Bash`, so
+  commands that print stored values, carry literal tokens, read the store, or omit a required `keyfob run`
+  wrapper are refused before execution.
+- **Recognised secrets in a prompt are stored, then that prompt is blocked.** Codex cannot rewrite a submitted
+  prompt today. After keyfob captures the value, resend the request without it. Prefer running
+  `keyfob add <name>` in your own terminal, especially for passwords and values containing spaces.
+- **Credential requests use the CLI.** Codex records a missing credential with `keyfob request`; you add it in
+  your terminal and Codex verifies only its name with `keyfob ls --json`. Codex does not provide Claude's
+  `/keyfob` panel, `keyfob_request`, or `keyfob_status` module tools.
+- **Destructive keyfob commands stay user-owned.** Codex `PreToolUse` does not currently support an `ask`
+  decision, so `keyfob rm` and `migrate --apply` are blocked for the agent and must be run in your terminal.
+
+Codex does not trust plugin hooks automatically. Prompt capture and the command guard start only after you
+review and trust `hooks/codex.json`; without that trust, use terminal entry and do not paste secrets into chat.
+
 ## In your terminal
 
 ![keyfob doctor finds an API key written in plain text in ~/.bashrc; keyfob add stores it without echoing it; keyfob ls lists names, never values; keyfob run hands it to eval.py for that one run; echo shows the shell itself never had it. The key is made up.](assets/terminal.gif)
 
 ```sh
-keyfob add openai-key --env OPENAI_API_KEY      # asks without echo; or paste `keyfob: openai-key <token>` in Claude Code
+keyfob add openai-key --env OPENAI_API_KEY      # asks without echo in your terminal
 keyfob run openai-key -- python3 eval.py        # the script reads os.environ["OPENAI_API_KEY"]
 keyfob run binance -- binance-cli spot ping     # a group a plugin declared: several variables at once
 keyfob ls                                       # names, variables, who needs them; never values
 keyfob check --live                             # complete? still accepted by the service?
-keyfob doctor                                   # storage in use; plaintext secrets left in rc files or Claude settings
+keyfob doctor                                   # storage in use; plaintext secrets left in rc files or agent settings
 ```
 
 | Command | Does |
@@ -88,11 +120,11 @@ keyfob doctor                                   # storage in use; plaintext secr
 | `request <name> [--env VAR] --reason T [--obtain URL]` | record that a secret is wanted (no value) in `~/.config/keyfob/declarations.d/requested.json`; `/keyfob` lists it to add |
 | `run <group\|name\|name=VAR>... -- <cmd>` | run `cmd` with those secrets in its environment (`env` is an alias) |
 | `ls`, `check [--live]`, `which VAR`, `decls`, `doctor` | look, never show values; `--json` on all but `which` |
-| `get <name>` | print a value: your terminal, your programs (the guard refuses it in Claude's Bash) |
-| `rm <name>`, `rename <old> <new>` | the guard asks you before an `rm` Claude runs |
+| `get <name>` | print a value: your terminal, your programs (the agent shell guard refuses it) |
+| `rm <name>`, `rename <old> <new>` | deletion requires the user; rename does not expose the value |
 | `migrate --keychain-prefix <old/> [--names a,b] [--apply]` | preview, then with `--apply` copy Keychain items another tool wrote as `<old/><name>`, for the declared names or `--names` |
 | `scrub` | stdin to stdout with every stored value replaced by `[keyfob:<name>]` |
-| `capture`, `patterns`, `guard` | used by the Claude Code plugin |
+| `capture`, `patterns`, `guard` | used by the Claude Code and Codex plugins |
 
 **Where the values live.** The macOS Keychain, the Linux Secret Service, or, on a server or cluster with
 neither, one `0600` file in a `0700` folder (what Claude Code itself does for its own login on Linux). Choose
@@ -103,8 +135,8 @@ One self-contained binary (Rust) for macOS (arm64, x86_64) and Linux (x86_64, aa
 
 ## For plugin authors: keyfob.json
 
-Put it at your plugin's root. keyfob reads it from every plugin enabled in your user settings
-(`~/.claude/settings.json`); people add their own in
+Put it at your plugin's root. keyfob reads it from enabled Claude Code plugins and installed Codex plugin
+caches; people add their own in
 `~/.config/keyfob/declarations.d/`. Schema: [`plugins/keyfob/schema/keyfob.schema.json`](plugins/keyfob/schema/keyfob.schema.json).
 
 ```json
@@ -135,19 +167,20 @@ remote server's headers are outside what keyfob can hand over.
 
 ## What it protects, and what it does not
 
-- It keeps tokens out of rc files, settings files and the environment of every process. It keeps a token out of
-  the conversation and the transcript when it is pasted as a `keyfob:` line or in a recognised format, or typed
-  into `/keyfob`, and the guard refuses the common commands that would print one.
+- It keeps tokens out of rc files, settings files and the environment of every process. With trusted local
+  hooks, it intercepts a `keyfob:` line or recognised token before the model receives it. Claude rewrites the
+  prompt; Codex stores the value and blocks that submission so the user can resend without it.
 - It does not filter what a command run under `keyfob run` prints: a script that prints its key puts it in the
-  conversation. A literal token that Claude writes into a Bash command is already in the transcript when the
+  conversation. A literal token that an agent writes into a Bash command is already in the transcript when the
   guard refuses it; the refusal stops it from running, not from being written.
 - The guard is a seatbelt against mistakes, not a sandbox: a command written to get around it can. It fails open
   if it cannot read its input.
 - Whatever runs as you can read what you can read: on a server the file store protects against other users, not
   against root; on macOS any program running as you can read keyfob's items through `/usr/bin/security` without
   a dialog, and the Keychain asks only apps that read it directly.
-- A pasted `keyfob:` line (a token without spaces) or a token in a recognised format is stored and replaced
-  before the message enters the session; anything else is sent as typed. Claude Code's own prompt history file
+- In Claude Code, a pasted `keyfob:` line or recognised token is stored and replaced before the message enters
+  the session. In Codex, it is stored and the prompt is blocked. Other text is sent as typed. Claude Code's own
+  prompt history file
   (`~/.claude/history.jsonl`) is written by the terminal, and is not covered unless that turns out otherwise on
   your version: check with a dummy token, and use `/keyfob` (its input never becomes a message) when it matters.
 - The `/keyfob` field redraws its content as bullets after each keystroke or paste, so what you type can show for
@@ -155,8 +188,9 @@ remote server's headers are outside what keyfob can hand over.
 
 ## Develop
 
-`cargo test` (add `KEYFOB_TEST_KEYCHAIN=1` on macOS for the Keychain round trip), `claude plugin validate
-plugins/keyfob`, `claude plugin test plugins/keyfob`. In a checkout the launcher uses `target/release` or
+`cargo test` (add `KEYFOB_TEST_KEYCHAIN=1` on macOS for the Keychain round trip),
+`python3 -m unittest discover -s tests -v`, `claude plugin validate plugins/keyfob`, and
+`claude plugin test plugins/keyfob`. In a checkout the launcher uses `target/release` or
 `target/debug`. Releases: bump `version` in `Cargo.toml`, `plugin.json`, `VERSION=` in
 `plugins/keyfob/bin/keyfob` and the README badge, run `cargo build` so `Cargo.lock` follows (the release build
 uses `--locked`), commit, then push a `v<version>` tag.

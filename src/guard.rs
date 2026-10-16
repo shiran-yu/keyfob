@@ -1,4 +1,4 @@
-//! `keyfob guard`: a Claude Code PreToolUse hook for Bash. It splits the command the way a shell would
+//! `keyfob guard`: a Claude Code and Codex PreToolUse hook for Bash. It splits the command the way a shell would
 //! (quotes, pipes, `;`, `&&`, `$( )`, backticks, `bash -c`, heredocs) and judges each simple command, so a
 //! word inside a quoted grep pattern is never mistaken for a command. It denies commands that would print a
 //! secret into the conversation, read keyfob's own store, carry a literal token, or need a group's secrets
@@ -573,7 +573,20 @@ fn judge_depth(cmd: &str, ctx: &Ctx, depth: usize) -> Verdict {
     ask.map(Verdict::Ask).unwrap_or(Verdict::Allow)
 }
 
-/// The hook: Claude Code's PreToolUse JSON on stdin, a decision on stdout (nothing means allow).
+fn hook_result(verdict: Verdict, codex: bool) -> Option<Value> {
+    let (decision, reason) = match verdict {
+        Verdict::Allow => return None,
+        Verdict::Deny(r) => ("deny", r),
+        Verdict::Ask(r) if codex => (
+            "deny",
+            format!("{r} Codex hooks cannot request approval yet; run this command yourself in a terminal if you want to proceed."),
+        ),
+        Verdict::Ask(r) => ("ask", r),
+    };
+    Some(json!({ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": decision, "permissionDecisionReason": reason } }))
+}
+
+/// The hook: Claude Code or Codex PreToolUse JSON on stdin, a decision on stdout (nothing means allow).
 pub fn hook() -> i32 {
     let mut input = String::new();
     if std::io::stdin().read_to_string(&mut input).is_err() {
@@ -590,12 +603,10 @@ pub fn hook() -> i32 {
     if cmd.trim().is_empty() {
         return 0;
     }
-    let (decision, reason) = match judge(cmd, &Ctx::load()) {
-        Verdict::Allow => return 0,
-        Verdict::Deny(r) => ("deny", r),
-        Verdict::Ask(r) => ("ask", r),
-    };
-    println!("{}", json!({ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": decision, "permissionDecisionReason": reason } }));
+    let codex = std::env::var("KEYFOB_HOOK_HOST").as_deref() == Ok("codex");
+    if let Some(output) = hook_result(judge(cmd, &Ctx::load()), codex) {
+        println!("{output}");
+    }
     0
 }
 
@@ -703,6 +714,10 @@ mod tests {
     #[test]
     fn deletion_asks() {
         assert!(matches!(judge("keyfob rm old-token", &ctx()), Verdict::Ask(_)));
+        assert_eq!(hook_result(Verdict::Ask("delete?".into()), false).unwrap()["hookSpecificOutput"]["permissionDecision"], "ask");
+        let codex = hook_result(Verdict::Ask("delete?".into()), true).unwrap();
+        assert_eq!(codex["hookSpecificOutput"]["permissionDecision"], "deny");
+        assert!(codex["hookSpecificOutput"]["permissionDecisionReason"].as_str().unwrap().contains("run this command yourself"));
     }
 
     #[test]
