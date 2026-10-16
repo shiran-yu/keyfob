@@ -1,0 +1,28 @@
+{
+  "name": "keyfob",
+  "version": "0.2.0",
+  "description": "Keep API keys and tokens out of agent conversations and hand each command only the secrets it needs.",
+  "author": {
+    "name": "Shiran Yu",
+    "url": "https://github.com/shiran-yu"
+  },
+  "homepage": "https://github.com/shiran-yu/keyfob",
+  "repository": "https://github.com/shiran-yu/keyfob",
+  "license": "CC-BY-NC-SA-4.0",
+  "keywords": ["secrets", "api-keys", "tokens", "keychain", "security"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "keyfob",
+    "shortDescription": "Keep secrets out of agent conversations",
+    "longDescription": "Store API keys in the operating-system keystore, block commands that expose them, and inject only the secrets a command needs.",
+    "developerName": "Shiran Yu",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/shiran-yu/keyfob",
+    "defaultPrompt": [
+      "Set up keyfob for the API key this project needs.",
+      "Check which secrets this project is missing."
+    ],
+    "brandColor": "#3B7A57"
+  }
+}
