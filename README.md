@@ -7,7 +7,7 @@
 Store a token once, let a command receive it for one run, and export nothing into your shell. Claude Code
 includes a masked `/keyfob` panel; Antigravity CLI and Codex use the native CLI, skill, and shell guard.
 
-[![version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/shiran-yu/keyfob/releases)
+[![version](https://img.shields.io/badge/version-0.2.1-blue)](https://github.com/shiran-yu/keyfob/releases)
 [![Antigravity CLI](https://img.shields.io/badge/Antigravity_CLI-plugin-4285F4)](https://antigravity.google)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-plugin-D97757)](https://github.com/anthropics/claude-code)
 [![Codex](https://img.shields.io/badge/Codex-plugin-111827)](https://developers.openai.com/plugins/build/plugins)
