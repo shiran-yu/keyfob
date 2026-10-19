@@ -62,6 +62,14 @@ pub fn codex_dir() -> PathBuf {
     std::env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(|| home().join(".codex"))
 }
 
+pub fn gemini_config_dir() -> PathBuf {
+    std::env::var_os("GEMINI_CONFIG_DIR").map(PathBuf::from).unwrap_or_else(|| home().join(".gemini/config"))
+}
+
+pub fn gemini_cli_dir() -> PathBuf {
+    std::env::var_os("GEMINI_CLI_DIR").map(PathBuf::from).unwrap_or_else(|| home().join(".gemini/antigravity-cli"))
+}
+
 pub fn index_path() -> PathBuf {
     config_dir().join("index.json")
 }

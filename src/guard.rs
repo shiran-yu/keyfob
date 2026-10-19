@@ -370,7 +370,7 @@ fn judge_simple(sc: &Simple, ctx: &Ctx, wrapped: &mut BTreeSet<String>, nested: 
     // every word and redirect: literal tokens and protected paths
     for x in w.iter().chain(sc.redirects.iter()) {
         if ctx.literal_token(x) {
-            return deny("the command carries a literal token. Store it once (the user pastes `keyfob: <name> <token>` into Claude Code, or runs `keyfob add <name>` in their terminal), then run the command under `keyfob run <name> -- ...` and read it from the environment.");
+            return deny("the command carries a literal token. Store it once (the user pastes `keyfob: <name> <token>` into the chat, or runs `keyfob add <name>` in their terminal), then run the command under `keyfob run <name> -- ...` and read it from the environment.");
         }
     }
     // leading assignments
@@ -452,10 +452,10 @@ fn judge_simple(sc: &Simple, ctx: &Ctx, wrapped: &mut BTreeSet<String>, nested: 
                 if args.contains(&"--stdin") {
                     let fed = Regex::new(r"(^|[;&|(]\s*)(echo|printf)\b|<<<").unwrap();
                     if fed.is_match(whole) {
-                        return deny("the value would sit in this command, and so in the transcript. Ask the user to paste it into Claude Code as `keyfob: <name> <token>`, or to run `keyfob add <name>` in their own terminal.");
+                        return deny("the value would sit in this command, and so in the transcript. Ask the user to paste it into the chat as `keyfob: <name> <token>`, or to run `keyfob add <name>` in their own terminal.");
                     }
                 } else if !args.contains(&"--from-env") {
-                    return deny("`keyfob add` asks for the value on a terminal Claude does not have. Ask the user to paste it into Claude Code as `keyfob: <name> <token>` (it is stored before the message is kept), or to run `keyfob add <name>` in their own terminal.");
+                    return deny("`keyfob add` asks for the value on a terminal the agent does not have. Ask the user to paste it into the chat as `keyfob: <name> <token>` (it is stored before the message is kept), or to run `keyfob add <name>` in their own terminal.");
                 }
             }
             _ => {}
@@ -586,7 +586,15 @@ fn hook_result(verdict: Verdict, codex: bool) -> Option<Value> {
     Some(json!({ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": decision, "permissionDecisionReason": reason } }))
 }
 
-/// The hook: Claude Code or Codex PreToolUse JSON on stdin, a decision on stdout (nothing means allow).
+fn antigravity_hook_result(verdict: Verdict) -> Value {
+    match verdict {
+        Verdict::Allow => json!({ "decision": "allow" }),
+        Verdict::Deny(r) => json!({ "decision": "deny", "reason": r }),
+        Verdict::Ask(r) => json!({ "decision": "ask", "reason": r }),
+    }
+}
+
+/// The hook: Antigravity, Claude Code or Codex PreToolUse JSON on stdin, a decision on stdout.
 pub fn hook() -> i32 {
     let mut input = String::new();
     if std::io::stdin().read_to_string(&mut input).is_err() {
@@ -596,6 +604,27 @@ pub fn hook() -> i32 {
         Ok(v) => v,
         Err(_) => return 0,
     };
+    let is_antigravity = v.get("toolCall").is_some() || std::env::var("KEYFOB_HOOK_HOST").as_deref() == Ok("antigravity");
+    if is_antigravity {
+        let tool = v["toolCall"]["name"].as_str().or_else(|| v["tool_name"].as_str()).unwrap_or("");
+        if !tool.is_empty() && tool != "run_command" && tool != "Bash" {
+            println!("{}", json!({ "decision": "allow" }));
+            return 0;
+        }
+        let cmd = v["toolCall"]["args"]["CommandLine"]
+            .as_str()
+            .or_else(|| v["toolCall"]["args"]["command"].as_str())
+            .or_else(|| v["tool_input"]["command"].as_str())
+            .unwrap_or("");
+        if cmd.trim().is_empty() {
+            println!("{}", json!({ "decision": "allow" }));
+            return 0;
+        }
+        let output = antigravity_hook_result(judge(cmd, &Ctx::load()));
+        println!("{output}");
+        return 0;
+    }
+
     if v["tool_name"].as_str().map(|t| t != "Bash").unwrap_or(false) {
         return 0;
     }

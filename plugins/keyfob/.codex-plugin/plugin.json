@@ -1,6 +1,6 @@
 {
   "name": "keyfob",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Keep API keys and tokens out of agent conversations and hand each command only the secrets it needs.",
   "author": {
     "name": "Shiran Yu",

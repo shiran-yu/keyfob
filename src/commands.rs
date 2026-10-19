@@ -11,7 +11,7 @@ use std::io::{IsTerminal, Read, Write};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub const HELP: &str = "keyfob: API tokens for your shell, your scripts and Claude Code, kept out of everyone's way.
+pub const HELP: &str = "keyfob: API tokens for your shell, your scripts and AI coding agents, kept out of everyone's way.
 
 Values live in the OS keystore (the macOS Keychain, the Linux Secret Service) or, on a server with neither,
 in one 0600 file in a 0700 folder. Nothing is exported into your shell: a command gets the secrets it asks
@@ -20,12 +20,12 @@ for, for its own run. Plugins say what they need in a keyfob.json of their own; 
   keyfob add <name> [--env VAR] [--note TEXT] [--from-env VAR | --stdin]
                                    store a secret; asks on the terminal without echo by default
   keyfob request <name> [--env VAR] --reason TEXT [--obtain URL] [--json]
-                                   record that a secret is wanted (no value); /keyfob lists it to add
+                                   record that a secret is wanted (no value); lists it to add
   keyfob run <group|name|name=VAR>... -- <command> [args]
                                    run a command with those secrets in its environment (alias: env)
   keyfob ls [--json]               what is stored or declared, where, who needs it; never values
   keyfob check [--live] [--json]   are the declared groups complete? --live asks each service
-  keyfob get <name>                print a value (your terminal, your programs; not Claude's Bash)
+  keyfob get <name>                print a value (your terminal, your programs; not the agent's shell)
   keyfob rm <name> [--yes]         delete a secret
   keyfob rename <old> <new>        give a secret another name
   keyfob which <ENV_VAR>           the group and secret behind an environment variable
@@ -33,9 +33,9 @@ for, for its own run. Plugins say what they need in a keyfob.json of their own; 
   keyfob doctor [--json]           storage in use, permissions, plaintext secrets left in rc files
   keyfob migrate --keychain-prefix <old/> [--names a,b] [--apply]
                                    copy Keychain items another tool kept under <old/><name>
-  keyfob capture                   (for the Claude Code plugin) store tokens found in stdin, print it scrubbed
+  keyfob capture                   store tokens found in stdin, print it scrubbed
   keyfob scrub                     stdin to stdout with every stored value replaced by [keyfob:<name>]
-  keyfob guard                     (for the Claude Code plugin) the PreToolUse hook for Bash
+  keyfob guard                     PreToolUse hook for agent shell tools (Antigravity, Claude Code, Codex)
 
 Storage: KEYFOB_BACKEND, or \"backend\" in ~/.config/keyfob/config.json: keychain, secret-service, file, auto.";
 
@@ -626,6 +626,40 @@ fn plaintext_hits() -> Vec<Value> {
             }
         }
     }
+    // Antigravity MCP configs (~/.gemini/config/mcp_config.json)
+    for mcp_file in [
+        util::gemini_config_dir().join("mcp_config.json"),
+        util::home().join(".gemini/config/mcp_config.json"),
+    ] {
+        if let Some(mcp) = util::load_json(&mcp_file) {
+            for (name, cfg) in mcp["mcpServers"].as_object().into_iter().flatten() {
+                for (k, v) in cfg["env"].as_object().into_iter().flatten() {
+                    if util::secret_like_var(k) && v.as_str().map(|s| s.len() >= 8 && !s.starts_with('$')).unwrap_or(false) {
+                        hits.push(json!({ "file": format!("{} mcpServers.{name}.env", util::tilde(&mcp_file)), "line": null, "var": k }));
+                    }
+                }
+                for (k, v) in cfg["headers"].as_object().into_iter().flatten() {
+                    let credential = k.eq_ignore_ascii_case("authorization") || util::secret_like_var(&k.replace('-', "_"));
+                    if credential && v.as_str().map(|s| s.len() >= 16 && !s.contains("${")).unwrap_or(false) {
+                        hits.push(json!({ "file": format!("{} mcpServers.{name}.headers", util::tilde(&mcp_file)), "line": null, "var": k }));
+                    }
+                }
+            }
+        }
+    }
+    // Antigravity settings
+    for p in [
+        util::gemini_cli_dir().join("settings.json"),
+        util::home().join(".gemini/settings.json"),
+    ] {
+        if let Some(env) = util::load_json(&p).and_then(|v| v["env"].as_object().cloned()) {
+            for (var, val) in env {
+                if util::secret_like_var(&var) && val.as_str().map(|s| s.len() >= 8 && !s.starts_with('$')).unwrap_or(false) {
+                    hits.push(json!({ "file": util::tilde(&p), "line": null, "var": var }));
+                }
+            }
+        }
+    }
     hits
 }
 
@@ -657,7 +691,7 @@ fn doctor(args: &[String]) -> R<()> {
     }
     println!("  {files} declaration file(s)");
     if plain.is_empty() {
-        println!("no plaintext secrets in shell rc files or Claude settings");
+        println!("no plaintext secrets in shell rc files, agent settings or MCP configs");
     } else {
         println!("plaintext secrets to move in (keyfob add <name> --from-env VAR, then delete the line):");
         for h in &plain {

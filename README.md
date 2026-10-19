@@ -2,12 +2,13 @@
 
 # keyfob
 
-**Keep your API keys and tokens out of Claude Code and Codex conversations.**
+**Keep your API keys and tokens out of Antigravity CLI, Claude Code and Codex conversations.**
 
 Store a token once, let a command receive it for one run, and export nothing into your shell. Claude Code
-includes a masked `/keyfob` panel; Codex uses the same CLI, skill, prompt capture and shell guard.
+includes a masked `/keyfob` panel; Antigravity CLI and Codex use the native CLI, skill, and shell guard.
 
 [![version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/shiran-yu/keyfob/releases)
+[![Antigravity CLI](https://img.shields.io/badge/Antigravity_CLI-plugin-4285F4)](https://antigravity.google)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-plugin-D97757)](https://github.com/anthropics/claude-code)
 [![Codex](https://img.shields.io/badge/Codex-plugin-111827)](https://developers.openai.com/plugins/build/plugins)
 [![platforms](https://img.shields.io/badge/macOS_%C2%B7_Linux-arm64_%C2%B7_x86__64-2ea44f)](https://github.com/shiran-yu/keyfob/releases)
@@ -18,6 +19,16 @@ includes a masked `/keyfob` panel; Codex uses the same CLI, skill, prompt captur
 </div>
 
 ## Install
+
+### Antigravity CLI (`agy`)
+
+From local clone or checkout:
+
+```sh
+agy plugin install ./plugins/keyfob
+```
+
+Or install from marketplace/remote. The plugin registers the `usage` skill and the `run_command` guard hook automatically.
 
 ### Codex
 
@@ -101,6 +112,13 @@ model never needs to see it. What this covers, and what it does not, is [below](
 Codex does not trust plugin hooks automatically. Prompt capture and the command guard start only after you
 review and trust `hooks/codex.json`; without that trust, use terminal entry and do not paste secrets into chat.
 
+## In Antigravity CLI (`agy`)
+
+- **PreToolUse Guard on `run_command`.** Antigravity CLI executes shell commands via `run_command`. Keyfob intercepts `run_command` before execution to block commands that would print secrets (`keyfob get`, `env`, `echo $TOKEN`, directly reading the store file), carry literal tokens, or execute group-protected tools without `keyfob run`.
+- **Interactive approval for deletions.** Antigravity CLI natively supports interactive permission prompts via `{"decision": "ask"}` in its PreToolUse lifecycle, so commands like `keyfob rm` or `migrate --apply` prompt you for confirmation before executing.
+- **Plugin declarations discovery.** keyfob automatically discovers `keyfob.json` files in workspace plugins (`.agents/plugins/<plugin>/` or `.agent/plugins/<plugin>/`), installed global plugins (`~/.gemini/config/plugins/<plugin>/`), and personal declarations in `~/.config/keyfob/declarations.d/`.
+- **Doctor auditing.** `keyfob doctor` inspects Antigravity MCP server configurations (`~/.gemini/config/mcp_config.json`, project `mcp_config.json`, `.agents/mcp_config.json`) and agent settings for plaintext secrets.
+
 ## In your terminal
 
 ![keyfob doctor finds an API key written in plain text in ~/.bashrc; keyfob add stores it without echoing it; keyfob ls lists names, never values; keyfob run hands it to eval.py for that one run; echo shows the shell itself never had it. The key is made up.](assets/terminal.gif)
@@ -124,7 +142,7 @@ keyfob doctor                                   # storage in use; plaintext secr
 | `rm <name>`, `rename <old> <new>` | deletion requires the user; rename does not expose the value |
 | `migrate --keychain-prefix <old/> [--names a,b] [--apply]` | preview, then with `--apply` copy Keychain items another tool wrote as `<old/><name>`, for the declared names or `--names` |
 | `scrub` | stdin to stdout with every stored value replaced by `[keyfob:<name>]` |
-| `capture`, `patterns`, `guard` | used by the Claude Code and Codex plugins |
+| `capture`, `patterns`, `guard` | used by the Antigravity CLI, Claude Code and Codex plugins |
 
 **Where the values live.** The macOS Keychain, the Linux Secret Service, or, on a server or cluster with
 neither, one `0600` file in a `0700` folder (what Claude Code itself does for its own login on Linux). Choose
@@ -135,8 +153,8 @@ One self-contained binary (Rust) for macOS (arm64, x86_64) and Linux (x86_64, aa
 
 ## For plugin authors: keyfob.json
 
-Put it at your plugin's root. keyfob reads it from enabled Claude Code plugins and installed Codex plugin
-caches; people add their own in
+Put it at your plugin's root. keyfob reads it from enabled Claude Code plugins, installed Codex plugin
+caches, and Antigravity plugins (`~/.gemini/config/plugins/` or `.agents/plugins/`); people add their own in
 `~/.config/keyfob/declarations.d/`. Schema: [`plugins/keyfob/schema/keyfob.schema.json`](plugins/keyfob/schema/keyfob.schema.json).
 
 ```json

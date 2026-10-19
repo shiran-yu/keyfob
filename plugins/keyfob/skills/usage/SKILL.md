@@ -23,6 +23,10 @@ running commands; use a `keyfob` already on `PATH` only when it is the same inst
    argument, and never print them.
 4. **The user adds a secret, not you. Never ask for its value in normal chat.** Use a stable name such as
    `openreview-password`, `github-token`, or `openalex-key`; reuse a name `keyfob ls --json` already lists.
+   - **In Antigravity CLI (`agy`)**, run `keyfob request <name> --env <VAR> --reason <text> [--obtain <URL>]`,
+     then ask the user to run `keyfob add <name> --env <VAR>` in their own terminal. After they confirm it is stored,
+     verify with `keyfob ls --json` and proceed under `keyfob run`. The PreToolUse hook guards `run_command` calls
+     against token exposure and enforces `keyfob run` for declared groups.
    - **In Codex**, run `keyfob request <name> --env <VAR> --reason <text> [--obtain <URL>]`, then ask the user
      to run `keyfob add <name> --env <VAR>` in their own terminal. After they say it is stored, verify with
      `keyfob ls --json` and continue under `keyfob run`. When the user has explicitly trusted the plugin hooks,
@@ -40,13 +44,13 @@ running commands; use a `keyfob` already on `PATH` only when it is the same inst
 5. **A recognised token pasted without a `keyfob:` line** is stored as `pasted-N`. In Claude Code the prompt
    is rewritten with `[keyfob:pasted-N]`; in Codex the prompt is blocked and must be resent without the value.
    Ask what it is for, then `keyfob rename pasted-N <name>`.
-6. **Deleting** (`keyfob rm`) requires the user. Claude Code asks for approval; Codex blocks it because
+6. **Deleting** (`keyfob rm`) requires the user. Claude Code and Antigravity CLI ask for approval; Codex blocks it because
    PreToolUse cannot request approval yet, so tell the user to run the deletion in their own terminal.
 
 ## Finding out what exists
 
-- In Claude Code, the `keyfob_status` tool is available. In both hosts, `keyfob ls --json` and
-  `keyfob check --json` show names, variables, consumers, and complete groups without values.
+- In Claude Code, the `keyfob_status` tool is available. Across Antigravity CLI, Claude Code, and Codex, `keyfob ls --json`
+  and `keyfob check --json` show names, variables, consumers, and complete groups without values.
   `keyfob check --live` asks each declared service whether its secrets work.
 - `keyfob which <VAR>`: the group and secret behind a variable.
 - `keyfob doctor`: the storage in use, and plaintext secrets left in shell rc files or agent settings (names
@@ -56,7 +60,8 @@ running commands; use a `keyfob` already on `PATH` only when it is the same inst
 ## Declaring what a plugin needs: keyfob.json
 
 At the plugin's root (personal ones in `~/.config/keyfob/declarations.d/<name>.json`). keyfob finds declarations
-in enabled Claude Code plugins and installed Codex plugin caches. Schema: `schema/keyfob.schema.json` here.
+in enabled Claude Code plugins, installed Codex plugin caches, and Antigravity plugins (`~/.gemini/config/plugins/` or
+workspace `.agents/plugins/`). Schema: `schema/keyfob.schema.json` here.
 
 ```json
 {

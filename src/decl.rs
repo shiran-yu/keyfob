@@ -84,9 +84,15 @@ pub fn files() -> Vec<PathBuf> {
         let enabled = util::load_json(&claude.join("settings.json")).map(|v| v["enabledPlugins"].clone()).unwrap_or(Value::Null);
         let markets = util::load_json(&claude.join("plugins/known_marketplaces.json")).unwrap_or(Value::Null);
         let declared_in = |root: &Path| -> Option<PathBuf> {
-            [root.join("keyfob.json"), root.join(".claude-plugin/keyfob.json"), root.join(".codex-plugin/keyfob.json")]
-                .into_iter()
-                .find(|p| p.is_file())
+            [
+                root.join("keyfob.json"),
+                root.join(".claude-plugin/keyfob.json"),
+                root.join(".codex-plugin/keyfob.json"),
+                root.join(".antigravity-plugin/keyfob.json"),
+                root.join(".agents/keyfob.json"),
+            ]
+            .into_iter()
+            .find(|p| p.is_file())
         };
         if let Some(plugins) = installed["plugins"].as_object() {
             for (key, entries) in plugins {
@@ -134,6 +140,35 @@ pub fn files() -> Vec<PathBuf> {
                 }
             }
         }
+
+        // Antigravity global plugins in ~/.gemini/config/plugins/<name>
+        let gemini_plugins = util::gemini_config_dir().join("plugins");
+        if let Ok(entries) = std::fs::read_dir(gemini_plugins) {
+            for p in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+                if let Some(found) = declared_in(&p) {
+                    out.push(found);
+                }
+            }
+        }
+
+        // Antigravity workspace plugins in .agents/plugins/ or .agent/plugins/
+        if let Ok(mut cwd) = std::env::current_dir() {
+            loop {
+                for agent_dir in [cwd.join(".agents/plugins"), cwd.join(".agent/plugins")] {
+                    if let Ok(entries) = std::fs::read_dir(&agent_dir) {
+                        for p in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+                            if let Some(found) = declared_in(&p) {
+                                out.push(found);
+                            }
+                        }
+                    }
+                }
+                if cwd.join(".git").exists() || !cwd.pop() {
+                    break;
+                }
+            }
+        }
+
         if let Some(root) = std::env::var_os("PLUGIN_ROOT").map(PathBuf::from) {
             if let Some(found) = declared_in(&root) {
                 out.push(found);

@@ -180,6 +180,48 @@ fn guard_hook_speaks_claude_codes_json() {
 }
 
 #[test]
+fn guard_hook_speaks_antigravity_json() {
+    let e = Env::new();
+    e.decl(DECL);
+    let check = |tool: &str, cmd: &str| -> serde_json::Value {
+        let payload = serde_json::json!({
+            "toolCall": {
+                "name": tool,
+                "args": {
+                    "CommandLine": cmd
+                }
+            }
+        });
+        serde_json::from_str(&out(&e.run(&["guard"], Some(&payload.to_string())))).unwrap_or(serde_json::Value::Null)
+    };
+    let denied = check("run_command", "keyfob get demo-key");
+    assert_eq!(denied["decision"], "deny");
+    assert!(denied["reason"].as_str().unwrap().contains("keyfob get"));
+
+    let asked = check("run_command", "keyfob rm demo-key");
+    assert_eq!(asked["decision"], "ask");
+
+    let allowed = check("run_command", "ls -la");
+    assert_eq!(allowed["decision"], "allow");
+
+    // non-run_command tool is allowed
+    let other_tool = check("view_file", "keyfob get demo-key");
+    assert_eq!(other_tool["decision"], "allow");
+
+    // incomplete group allows
+    assert_eq!(check("run_command", "demo-cli ping")["decision"], "allow");
+
+    // complete group forces keyfob run
+    e.run(&["add", "demo-key", "--stdin"], Some("aaaaaaaaaa"));
+    e.run(&["add", "demo-secret", "--stdin"], Some("bbbbbbbbbb"));
+    let group_denied = check("run_command", "demo-cli ping");
+    assert_eq!(group_denied["decision"], "deny");
+    assert!(group_denied["reason"].as_str().unwrap().contains("keyfob run demo --"));
+
+    assert_eq!(check("run_command", "keyfob run demo -- demo-cli ping")["decision"], "allow");
+}
+
+#[test]
 fn doctor_follows_sourced_files_and_reads_mcp_config() {
     let e = Env::new();
     std::fs::create_dir_all(e.home().join(".config")).unwrap();
@@ -266,6 +308,41 @@ fn declarations_are_read_from_the_codex_plugin_cache() {
     let o = c.output().unwrap();
     let v: serde_json::Value = serde_json::from_str(&out(&o)).unwrap();
     assert_eq!(v["groups"]["search"]["env"]["S2_API_KEY"], "s2-key", "{}", out(&o));
+}
+
+#[test]
+fn declarations_are_read_from_antigravity_plugins() {
+    let e = Env::new();
+    let gemini = e.dir.path().join("gemini_config");
+    let plugin = gemini.join("plugins/scholar");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(
+        plugin.join("keyfob.json"),
+        r#"{"name":"scholar","groups":{"papers":{"env":{"S2_API_KEY":"s2-key"}}}}"#,
+    )
+    .unwrap();
+    let mut c = e.cmd(&["decls", "--json"]);
+    c.env_remove("KEYFOB_NO_PLUGINS").env("GEMINI_CONFIG_DIR", &gemini);
+    let o = c.output().unwrap();
+    let v: serde_json::Value = serde_json::from_str(&out(&o)).unwrap();
+    assert_eq!(v["groups"]["papers"]["env"]["S2_API_KEY"], "s2-key", "{}", out(&o));
+}
+
+#[test]
+fn doctor_reads_antigravity_mcp_config() {
+    let e = Env::new();
+    let gemini = e.dir.path().join("gemini_config");
+    std::fs::create_dir_all(&gemini).unwrap();
+    std::fs::write(
+        gemini.join("mcp_config.json"),
+        r#"{"mcpServers":{"analytics":{"command":"node","env":{"ANALYTICS_API_KEY":"abcdef1234567890"}}}}"#,
+    )
+    .unwrap();
+    let mut c = e.cmd(&["doctor", "--json"]);
+    c.env("GEMINI_CONFIG_DIR", &gemini);
+    let s = out(&c.output().unwrap());
+    assert!(s.contains("mcpServers.analytics.env") && s.contains("ANALYTICS_API_KEY"), "{s}");
+    assert!(!s.contains("abcdef1234567890"));
 }
 
 const OPTIONAL_DECL: &str = r#"{

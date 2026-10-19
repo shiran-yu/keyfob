@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "keyfob",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Keep API keys and tokens out of agent conversations and hand each command only the secrets it needs.",
   "author": {
     "name": "Shiran Yu",
@@ -27,6 +27,23 @@
           "Check which secrets this project is missing."
         ],
         "brandColor": "#3B7A57"
+      },
+      "com.google": {
+        "hooks": "./hooks.json",
+        "interface": {
+          "displayName": "keyfob",
+          "shortDescription": "Keep secrets out of agent conversations",
+          "longDescription": "Store API keys in the operating-system keystore, block commands that expose them, and inject only the secrets a command needs.",
+          "developerName": "Shiran Yu",
+          "category": "Productivity",
+          "capabilities": ["Write"],
+          "websiteURL": "https://github.com/shiran-yu/keyfob",
+          "defaultPrompt": [
+            "Set up keyfob for the API key this project needs.",
+            "Check which secrets this project is missing."
+          ],
+          "brandColor": "#3B7A57"
+        }
       }
     }
   }
